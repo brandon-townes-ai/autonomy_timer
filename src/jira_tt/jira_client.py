@@ -1,0 +1,108 @@
+"""Jira Cloud REST API client."""
+import requests
+from requests.auth import HTTPBasicAuth
+
+
+class JiraClient:
+    def __init__(self, base_url: str, email: str, api_token: str, verbose: bool = False):
+        self._base = base_url.rstrip("/")
+        self._auth = HTTPBasicAuth(email, api_token)
+        self._verbose = verbose
+        self._email = email
+        self._session = requests.Session()
+        self._session.auth = self._auth
+        self._session.headers.update({"Accept": "application/json", "Content-Type": "application/json"})
+
+    def _url(self, path: str) -> str:
+        return f"{self._base}/rest/api/3/{path.lstrip('/')}"
+
+    def _log(self, msg: str):
+        if self._verbose:
+            print(f"[jira] {msg}")
+
+    def validate_issue(self, issue_key: str) -> dict:
+        """Raise if the issue doesn't exist; return basic issue metadata."""
+        url = self._url(f"issue/{issue_key}")
+        self._log(f"GET {url}")
+        self._log(f"auth email: {self._email}")
+        resp = self._session.get(url, params={"fields": "summary"})
+        self._log(f"HTTP {resp.status_code}")
+        if resp.status_code != 200:
+            self._log(f"response body: {resp.text[:500]}")
+        if resp.status_code == 404:
+            raise ValueError(f"Jira issue not found: {issue_key}")
+        if resp.status_code == 401:
+            raise ValueError(f"Jira auth failed (401) — check JIRA_EMAIL and JIRA_API_TOKEN")
+        if resp.status_code == 403:
+            raise ValueError(f"Jira permission denied (403) — your account may not have access to {issue_key}")
+        resp.raise_for_status()
+        return resp.json()
+
+    @staticmethod
+    def _to_jira_duration(seconds: int) -> str:
+        """Convert seconds to Jira duration string (e.g. '1h 30m'). Minimum 1m."""
+        total_minutes = max(1, round(seconds / 60))
+        hours, minutes = divmod(total_minutes, 60)
+        if hours and minutes:
+            return f"{hours}h {minutes}m"
+        elif hours:
+            return f"{hours}h"
+        else:
+            return f"{minutes}m"
+
+    def update_time_tracking(self, issue_key: str, mode: str, seconds: int) -> None:
+        """Update the timetracking field on *issue_key*.
+
+        mode: 'original' → originalEstimate
+              'spent'     → logs work via worklog
+              'remaining' → remainingEstimate
+        """
+        duration = self._to_jira_duration(seconds)
+        self._log(f"duration string: {duration}")
+
+        if mode == "original":
+            payload = {"fields": {"timetracking": {"originalEstimate": duration}}}
+            url = self._url(f"issue/{issue_key}")
+            self._log(f"PUT {url} payload={payload}")
+            resp = self._session.put(url, json=payload)
+            self._log(f"HTTP {resp.status_code} — {resp.text[:500]}")
+            resp.raise_for_status()
+        elif mode == "spent":
+            payload = {"timeSpent": duration}
+            url = self._url(f"issue/{issue_key}/worklog")
+            self._log(f"POST {url} payload={payload}")
+            resp = self._session.post(url, json=payload)
+            self._log(f"HTTP {resp.status_code} — {resp.text[:500]}")
+            resp.raise_for_status()
+        elif mode == "remaining":
+            payload = {"fields": {"timetracking": {"remainingEstimate": duration}}}
+            url = self._url(f"issue/{issue_key}")
+            self._log(f"PUT {url} payload={payload}")
+            resp = self._session.put(url, json=payload)
+            self._log(f"HTTP {resp.status_code} — {resp.text[:500]}")
+            resp.raise_for_status()
+        else:
+            raise ValueError(f"Unknown mode: {mode!r}")
+
+    def add_comment(self, issue_key: str, body: str) -> None:
+        """Post a plain-text comment on *issue_key*."""
+        payload = {
+            "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": body}],
+                    }
+                ],
+            }
+        }
+        resp = self._session.post(self._url(f"issue/{issue_key}/comment"), json=payload)
+        resp.raise_for_status()
+
+    def update_custom_field(self, issue_key: str, field_id: str, value: str) -> None:
+        """Write *value* to a custom field on *issue_key*."""
+        payload = {"fields": {field_id: value}}
+        resp = self._session.put(self._url(f"issue/{issue_key}"), json=payload)
+        resp.raise_for_status()

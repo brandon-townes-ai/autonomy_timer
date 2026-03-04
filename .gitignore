@@ -1,3 +1,7 @@
 .env
 .venv
 /docs
+.DS_Store
+*.txt
+*.egg-info/
+
