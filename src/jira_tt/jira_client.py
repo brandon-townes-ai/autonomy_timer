@@ -3,6 +3,18 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 
+def _adf_to_text(node: dict) -> str:
+    """Recursively extract plain text from an Atlassian Document Format (ADF) node."""
+    if not isinstance(node, dict):
+        return ""
+    if node.get("type") == "text":
+        return node.get("text", "")
+    parts = []
+    for child in node.get("content", []):
+        parts.append(_adf_to_text(child))
+    return "\n".join(p for p in parts if p)
+
+
 class JiraClient:
     def __init__(self, base_url: str, email: str, api_token: str, verbose: bool = False):
         self._base = base_url.rstrip("/")
@@ -19,6 +31,39 @@ class JiraClient:
     def _log(self, msg: str):
         if self._verbose:
             print(f"[jira] {msg}")
+
+    def fetch_issue_text(self, issue_key: str) -> str:
+        """Fetch Jira issue description and comments as plain text."""
+        url = self._url(f"issue/{issue_key}")
+        self._log(f"GET {url} (description+comments)")
+        resp = self._session.get(url, params={"fields": "description,comment"})
+        resp.raise_for_status()
+        data = resp.json()
+        fields = data.get("fields", {})
+
+        parts: list[str] = []
+
+        description = fields.get("description")
+        if description:
+            parts.append(_adf_to_text(description))
+
+        for comment in fields.get("comment", {}).get("comments", []):
+            body = comment.get("body")
+            if body:
+                parts.append(_adf_to_text(body))
+
+        return "\n".join(p for p in parts if p)
+
+    def fetch_time_tracking(self, issue_key: str) -> dict:
+        """Return the timetracking fields for *issue_key*.
+
+        Keys of interest: timeSpentSeconds, originalEstimateSeconds, remainingEstimateSeconds.
+        Missing keys default to 0.
+        """
+        url = self._url(f"issue/{issue_key}")
+        resp = self._session.get(url, params={"fields": "timetracking"})
+        resp.raise_for_status()
+        return resp.json().get("fields", {}).get("timetracking", {})
 
     def validate_issue(self, issue_key: str) -> dict:
         """Raise if the issue doesn't exist; return basic issue metadata."""
