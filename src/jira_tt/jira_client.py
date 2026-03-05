@@ -54,16 +54,25 @@ class JiraClient:
 
         return "\n".join(p for p in parts if p)
 
-    def fetch_time_tracking(self, issue_key: str) -> dict:
-        """Return the timetracking fields for *issue_key*.
-
-        Keys of interest: timeSpentSeconds, originalEstimateSeconds, remainingEstimateSeconds.
-        Missing keys default to 0.
-        """
+    def fetch_processed_paths(self, issue_key: str) -> set:
+        """Return the set of recording paths already stamped by a previous autonomy-timer run."""
         url = self._url(f"issue/{issue_key}")
-        resp = self._session.get(url, params={"fields": "timetracking"})
+        resp = self._session.get(url, params={"fields": "comment"})
         resp.raise_for_status()
-        return resp.json().get("fields", {}).get("timetracking", {})
+        comments = resp.json().get("fields", {}).get("comment", {}).get("comments", [])
+        processed: set = set()
+        for comment in comments:
+            body = comment.get("body")
+            if not body:
+                continue
+            text = _adf_to_text(body)
+            if "[autonomy-timer]" not in text:
+                continue
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith("/media/hotswap"):
+                    processed.add(line)
+        return processed
 
     def validate_issue(self, issue_key: str) -> dict:
         """Raise if the issue doesn't exist; return basic issue metadata."""
@@ -95,39 +104,16 @@ class JiraClient:
         else:
             return f"{minutes}m"
 
-    def update_time_tracking(self, issue_key: str, mode: str, seconds: int) -> None:
-        """Update the timetracking field on *issue_key*.
-
-        mode: 'original' → originalEstimate
-              'spent'     → logs work via worklog
-              'remaining' → remainingEstimate
-        """
+    def add_worklog(self, issue_key: str, seconds: int) -> None:
+        """Add a worklog entry to *issue_key* for *seconds* of time spent."""
         duration = self._to_jira_duration(seconds)
         self._log(f"duration string: {duration}")
-
-        if mode == "original":
-            payload = {"fields": {"timetracking": {"originalEstimate": duration}}}
-            url = self._url(f"issue/{issue_key}")
-            self._log(f"PUT {url} payload={payload}")
-            resp = self._session.put(url, json=payload)
-            self._log(f"HTTP {resp.status_code} — {resp.text[:500]}")
-            resp.raise_for_status()
-        elif mode == "spent":
-            payload = {"timeSpent": duration}
-            url = self._url(f"issue/{issue_key}/worklog")
-            self._log(f"POST {url} payload={payload}")
-            resp = self._session.post(url, json=payload)
-            self._log(f"HTTP {resp.status_code} — {resp.text[:500]}")
-            resp.raise_for_status()
-        elif mode == "remaining":
-            payload = {"fields": {"timetracking": {"remainingEstimate": duration}}}
-            url = self._url(f"issue/{issue_key}")
-            self._log(f"PUT {url} payload={payload}")
-            resp = self._session.put(url, json=payload)
-            self._log(f"HTTP {resp.status_code} — {resp.text[:500]}")
-            resp.raise_for_status()
-        else:
-            raise ValueError(f"Unknown mode: {mode!r}")
+        payload = {"timeSpent": duration}
+        url = self._url(f"issue/{issue_key}/worklog")
+        self._log(f"POST {url} payload={payload}")
+        resp = self._session.post(url, json=payload)
+        self._log(f"HTTP {resp.status_code} — {resp.text[:500]}")
+        resp.raise_for_status()
 
     def add_comment(self, issue_key: str, body: str) -> None:
         """Post a plain-text comment on *issue_key*."""
