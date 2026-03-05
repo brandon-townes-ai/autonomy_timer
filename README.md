@@ -1,6 +1,6 @@
 # autonomy_timer
 
-CLI tool that reads `duration_ns` from a YAML file and updates Jira time tracking.
+CLI tool that reads recording durations from vehicles via SSH and logs time to Jira worklogs.
 
 ## Setup
 
@@ -24,40 +24,65 @@ JIRA_API_TOKEN=your_api_token_here
 
 ## Usage
 
+### Single ticket
+
 ```bash
-autonomy_timer update --issue PROJ-123 --yaml-dir ./runs/latest
+autonomy_timer update --issue EC-123
 ```
 
-### Dry run (no Jira API calls)
+### Multiple tickets
 
 ```bash
-autonomy_timer update --issue PROJ-123 --yaml-dir ./runs/latest --dry-run
+# Space-separated
+autonomy_timer update --issues EC-123 EC-456
+
+# Comma-separated
+autonomy_timer update --issues EC-123,EC-456
+
+# Repeated flag
+autonomy_timer update --issues EC-123 --issues EC-456
+```
+
+### Dry run (SSHes and reads durations, skips Jira calls)
+
+```bash
+autonomy_timer update --issues EC-123 EC-456 --dry-run
 ```
 
 ### All options
 
 ```
---issue               Jira issue key (required)
---yaml-dir            Directory to search for YAML files (required)
---yaml-file           Explicit YAML file path (skips directory search)
---yaml-key            Key to read from YAML (default: duration_ns)
---jira-base-url       Jira base URL (env: JIRA_BASE_URL)
---jira-email          Jira account email (env: JIRA_EMAIL)
---jira-api-token      Jira API token (env: JIRA_API_TOKEN)
---mode                Time field to update: original|spent|remaining (default: spent)
---also-write-display  Write formatted duration to Jira (default: true)
---display-target      comment|customfield:<id> (default: comment)
---dry-run             Print output without calling Jira API
---verbose             Print extra detail
+--issue       Single Jira issue key
+--issues      One or more issue keys (space/comma-separated, or repeat the flag)
+--dry-run     SSH and read durations but skip Jira worklog/comment calls
+--verbose     Print extra detail (ticket text, processed paths, etc.)
+--jira-base-url   Jira base URL (env: JIRA_BASE_URL)
+--jira-email      Jira account email (env: JIRA_EMAIL)
+--jira-api-token  Jira API token (env: JIRA_API_TOKEN)
 ```
 
 ## How it works
 
-1. Finds the most recently modified `.yaml`/`.yml` file in `--yaml-dir`
-2. Extracts the value at `--yaml-key` (default: `duration_ns`, in nanoseconds)
-3. Converts to minutes and formats:
-   - `< 1,000` → `2.00 minutes`
-   - `1,000–999,999` → `12.34K minutes`
-   - `≥ 1,000,000` → `29.54M minutes`
-4. Updates the Jira issue's time tracking field
-5. Optionally posts the formatted string as a comment
+1. Fetches the Jira ticket (description + comments) and extracts recording paths
+2. Checks existing `[autonomy-timer]` stamp comments to skip already-processed paths
+3. SSHes to each vehicle and reads `drive_info.yaml` for `duration_ns`
+4. Aggregates durations and posts a worklog entry to Jira ("Time Spent")
+5. Posts an `[autonomy-timer]` stamp comment listing the processed paths
+
+Recording failures are per-path — if one vehicle's file is missing, the rest still process.
+
+### Multi-run / multiple testers
+
+Each run only processes paths not yet stamped. A second tester adding new recordings to the
+same ticket will only log their new paths — previously logged paths are skipped automatically.
+Jira accumulates the worklog entries, so "Time Spent" reflects the total across all runs.
+
+### Bare bag names
+
+If a ticket contains a bare bag name (e.g. `dev_kom-101_rockwell_haul_20260305_...`) without a
+full path, the tool auto-resolves it using the vehicle → hotswap mount mapping:
+
+| Vehicle | Mount |
+|---|---|
+| `kom-101` | `/media/hotswap2` |
+| `rap-107` | `/media/hotswap1` |
