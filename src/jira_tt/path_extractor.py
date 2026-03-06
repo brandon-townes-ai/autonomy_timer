@@ -10,9 +10,11 @@ _PATH_RE = re.compile(
 
 # Matches bare bag names like:
 #   dev_kom-101_rockwell_haul_20260305_walter_call_to_load_1772733420
-# The vehicle appears right after "dev_"; the date is an embedded YYYYMMDD block.
+#   metrics_kom-101_rockwell_haul_20260305_peter_reduce_1772741277
+#   perf-ver_rap-107_rockwell_haul_20260304_run1_1772662949
+# The vehicle appears right after the prefix; the date is an embedded YYYYMMDD block.
 _BARE_BAG_RE = re.compile(
-    r"(?<!\w)(dev_(?P<vehicle>[a-z]+-\d+)_[a-z0-9_]+?(?P<date>\d{8})[^\s\n]*)"
+    r"(?<!\w)([a-z][a-z0-9-]*_(?P<vehicle>[a-z]+-\d+)_[a-z0-9_]+?(?P<date>\d{8})[^\s\n]*)"
 )
 
 # Vehicle → /media/<mount> mapping.  Extend as new vehicles are added.
