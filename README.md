@@ -4,13 +4,24 @@ CLI tool that reads recording durations from vehicles via SSH and logs time to J
 
 ## Setup
 
+**1. Clone the repo**
+
+```bash
+git clone https://github.com/brandon-townes-ai/autonomy_timer.git
+cd autonomy_timer
+```
+
+**2. Create a virtual environment and install dependencies**
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
 
-Copy `.env.example` to `.env` and fill in your credentials:
+**3. Configure credentials**
+
+Copy `.env.example` to `.env` and fill in your Jira credentials:
 
 ```bash
 cp .env.example .env
@@ -21,6 +32,8 @@ JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=you@example.com
 JIRA_API_TOKEN=your_api_token_here
 ```
+
+> Generate a Jira API token at: https://id.atlassian.com/manage-profile/security/api-tokens
 
 ## Usage
 
