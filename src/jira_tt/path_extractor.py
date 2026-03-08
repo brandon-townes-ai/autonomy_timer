@@ -59,9 +59,16 @@ def extract_recording_paths(text: str) -> list[RecordingPath]:
     for m in _PATH_RE.finditer(text):
         _add(m.group(1), m.group("vehicle"))
 
-    # Bare bag names — skipped if the resolved path was already captured above.
+    # Basenames of all full paths already seen, for bare-bag deduplication below.
+    seen_basenames = {p.rstrip("/").rsplit("/", 1)[-1] for p in seen}
+
+    # Bare bag names — skipped if the resolved path was already captured above,
+    # OR if the bag name already appears as the basename of a full path (handles
+    # the case where the full path date-directory differs from the embedded date).
     for m in _BARE_BAG_RE.finditer(text):
         bag_name = m.group(1)
+        if bag_name in seen_basenames:
+            continue
         vehicle = m.group("vehicle")
         date_str = m.group("date")
         full_path = _resolve_bare_bag(bag_name, vehicle, date_str)
