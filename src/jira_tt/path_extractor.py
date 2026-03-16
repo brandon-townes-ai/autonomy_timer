@@ -50,6 +50,7 @@ def extract_recording_paths(text: str) -> list[RecordingPath]:
     results: list[RecordingPath] = []
 
     def _add(path: str, vehicle: str) -> None:
+        path = path.removesuffix("/traces")
         path = path.removesuffix("/logs")
         if path not in seen:
             seen.add(path)
