@@ -28,8 +28,8 @@ cp .env.example .env
 ```
 
 ```
-JIRA_BASE_URL=https://your-domain.atlassian.net
-JIRA_EMAIL=you@example.com
+JIRA_BASE_URL=https://appliedintuition.atlassian.net
+JIRA_EMAIL=you@applied.co
 JIRA_API_TOKEN=your_api_token_here
 ```
 
