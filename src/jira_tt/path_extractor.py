@@ -14,7 +14,7 @@ _PATH_RE = re.compile(
 #   metrics_kom-101_rockwell_haul_20260305_peter_reduce_1772741277
 #   perf-ver_rap-107_rockwell_haul_20260304_run1_1772662949
 _BARE_BAG_RE = re.compile(
-    r"(?<!\w)([a-z][a-z0-9-]*_(?P<vehicle>[a-z]+-\d+)_[a-z0-9_]+?(?P<date>20\d{6})[^\s\n]*)"
+    r"(?<!\w)([a-z][a-z0-9-]*_(?P<vehicle>[a-z]+-\d+)_[a-zA-Z0-9_-]+?(?P<date>20\d{6})[^\s\n]*)"
 )
 
 # Matches bare bag names with NO embedded YYYYMMDD date but a trailing Unix timestamp, e.g.:
@@ -22,7 +22,7 @@ _BARE_BAG_RE = re.compile(
 # Bags that already have a 20XXXXXX date are handled by _BARE_BAG_RE and will be
 # skipped via seen_basenames deduplication if this regex also matches them.
 _BARE_BAG_TS_RE = re.compile(
-    r"(?<!\w)([a-z][a-z0-9-]*_(?P<vehicle>[a-z]+-\d+)_[a-z0-9_]*?(?<!\d)(?P<ts>\d{10}))\b"
+    r"(?<!\w)([a-z][a-z0-9-]*_(?P<vehicle>[a-z]+-\d+)_[a-zA-Z0-9_-]*?(?<!\d)(?P<ts>\d{10}))\b"
 )
 
 # Vehicle → /media/<mount> mapping.  Extend as new vehicles are added.
