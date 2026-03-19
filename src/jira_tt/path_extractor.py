@@ -14,7 +14,7 @@ _PATH_RE = re.compile(
 #   metrics_kom-101_rockwell_haul_20260305_peter_reduce_1772741277
 #   perf-ver_rap-107_rockwell_haul_20260304_run1_1772662949
 _BARE_BAG_RE = re.compile(
-    r"(?<!\w)([a-z][a-z0-9-]*_(?P<vehicle>[a-z]+-\d+)_[a-zA-Z0-9_-]+?(?P<date>20\d{6})[^\s\n]*)"
+    r"(?<!\w)([a-z][a-z0-9-]*_(?P<vehicle>[a-z]+-\d+)_[a-zA-Z0-9_-]+?(?P<date>20\d{6})[a-zA-Z0-9_-]*?(?:_(?P<ts>\d{10}))?)\b"
 )
 
 # Matches bare bag names with NO embedded YYYYMMDD date but a trailing Unix timestamp, e.g.:
@@ -90,7 +90,11 @@ def extract_recording_paths(text: str) -> list[RecordingPath]:
         if bag_name in seen_basenames:
             continue
         vehicle = m.group("vehicle")
-        candidates = _candidates_from_date(bag_name, vehicle, m.group("date"))
+        ts = m.group("ts")
+        if ts:
+            candidates = _candidates_from_ts(bag_name, vehicle, ts)
+        else:
+            candidates = _candidates_from_date(bag_name, vehicle, m.group("date"))
         _add(candidates[0], vehicle, candidates)
 
     # Bags with no embedded date but a trailing Unix timestamp.
