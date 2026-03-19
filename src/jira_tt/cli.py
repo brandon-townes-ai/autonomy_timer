@@ -80,8 +80,6 @@ def _process_issue(
     successful_recordings: list[str] = []
 
     for recording in new_recordings:
-        remote_yaml = recording.path + "/drive_info.yaml"
-
         try:
             config = load_vehicle_config(recording.vehicle)
         except EnvironmentError as exc:
@@ -89,23 +87,32 @@ def _process_issue(
             failed_recordings.append(recording.path)
             continue
 
-        use_spinner = bool(os.environ.get("VEHICLE_SSH_PASSWORD")) and is_sshpass_available()
-        ctx = Status(f"Reading [dim]{remote_yaml}[/dim]...", console=console) if use_spinner else None
-        if ctx:
-            ctx.start()
-        else:
-            console.print(f"Reading [dim]{remote_yaml}[/dim]...")
-        try:
-            yaml_content = ssh_cat_file(remote_yaml, config, dry_run=False, verbose=verbose)
-        except subprocess.CalledProcessError:
+        yaml_content = None
+        resolved_path = None
+        for candidate in recording.candidates:
+            remote_yaml = candidate + "/drive_info.yaml"
+            use_spinner = bool(os.environ.get("VEHICLE_SSH_PASSWORD")) and is_sshpass_available()
+            ctx = Status(f"Reading [dim]{remote_yaml}[/dim]...", console=console) if use_spinner else None
             if ctx:
-                ctx.stop()
-            console.print(f"[red]✗[/red] SSH/cat failed for {remote_yaml}")
+                ctx.start()
+            else:
+                console.print(f"Reading [dim]{remote_yaml}[/dim]...")
+            try:
+                yaml_content = ssh_cat_file(remote_yaml, config, dry_run=False, verbose=verbose)
+                resolved_path = candidate
+                if ctx:
+                    ctx.stop()
+                break
+            except subprocess.CalledProcessError:
+                if ctx:
+                    ctx.stop()
+                if len(recording.candidates) > 1:
+                    console.print(f"[dim]  {remote_yaml} not found, trying next mount...[/dim]")
+
+        if yaml_content is None:
+            console.print(f"[red]✗[/red] SSH/cat failed for all candidates of {recording.path}")
             failed_recordings.append(recording.path)
             continue
-        finally:
-            if ctx:
-                ctx.stop()
 
         try:
             parsed = yaml.safe_load(yaml_content)
@@ -122,7 +129,7 @@ def _process_issue(
 
         duration_ns = parsed["duration_ns"]
         durations.append(duration_ns)
-        successful_recordings.append(recording.path)
+        successful_recordings.append(resolved_path)
         fmt, _ = format_minutes(duration_ns)
         console.print(f"[green]✓[/green] [dim]{recording.vehicle}[/dim] duration_ns: {duration_ns} ({fmt})")
 
