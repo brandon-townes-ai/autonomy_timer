@@ -1,7 +1,7 @@
 """Extract recording paths from Jira ticket text."""
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 
@@ -39,24 +39,41 @@ class RecordingPath:
             self.candidates = [self.path]
 
 
+def _date_candidates(bag_name: str, vehicle: str, anchor: datetime) -> list[str]:
+    """Return candidate paths for anchor date ±1 day across all mounts.
+
+    Trying a window around the anchor date makes path resolution robust against
+    local-vs-UTC timezone differences regardless of when relative to midnight
+    the recording was made.
+    Candidates are ordered: anchor, anchor-1, anchor+1 — each across all mounts.
+    """
+    dates = [anchor, anchor - timedelta(days=1), anchor + timedelta(days=1)]
+    seen: set[str] = set()
+    candidates = []
+    for dt in dates:
+        for mount in _HOTSWAP_MOUNTS:
+            p = f"/media/{mount}/{vehicle}/{dt.year}/{dt.month}/{dt.day}/{bag_name}"
+            if p not in seen:
+                seen.add(p)
+                candidates.append(p)
+    return candidates
+
+
 def _candidates_from_date(bag_name: str, vehicle: str, date_str: str) -> list[str]:
-    """Return one candidate path per hotswap mount for a bare bag with an embedded date."""
-    year = date_str[:4]
-    month = str(int(date_str[4:6]))   # strip leading zero (3 not 03)
-    day = str(int(date_str[6:8]))     # strip leading zero
-    return [
-        f"/media/{mount}/{vehicle}/{year}/{month}/{day}/{bag_name}"
-        for mount in _HOTSWAP_MOUNTS
-    ]
+    """Candidates anchored on an embedded YYYYMMDD date."""
+    anchor = datetime(
+        int(date_str[:4]),
+        int(date_str[4:6]),
+        int(date_str[6:8]),
+        tzinfo=timezone.utc,
+    )
+    return _date_candidates(bag_name, vehicle, anchor)
 
 
 def _candidates_from_ts(bag_name: str, vehicle: str, ts: str) -> list[str]:
-    """Return one candidate path per hotswap mount for a bare bag with a Unix timestamp."""
-    dt = datetime.fromtimestamp(int(ts), tz=timezone.utc)
-    return [
-        f"/media/{mount}/{vehicle}/{dt.year}/{dt.month}/{dt.day}/{bag_name}"
-        for mount in _HOTSWAP_MOUNTS
-    ]
+    """Candidates anchored on a Unix timestamp (UTC)."""
+    anchor = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+    return _date_candidates(bag_name, vehicle, anchor)
 
 
 def extract_recording_paths(text: str) -> list[RecordingPath]:
@@ -82,15 +99,14 @@ def extract_recording_paths(text: str) -> list[RecordingPath]:
     # Basenames of all full paths already seen, for bare-bag deduplication below.
     seen_basenames = {p.rstrip("/").rsplit("/", 1)[-1] for p in seen}
 
-    # Bare bag names — skipped if the resolved path was already captured above,
-    # OR if the bag name already appears as the basename of a full path (handles
-    # the case where the full path date-directory differs from the embedded date).
+    # Bare bag names — skipped if the bag name already appears as the basename of a full path.
     for m in _BARE_BAG_RE.finditer(text):
         bag_name = m.group(1)
         if bag_name in seen_basenames:
             continue
         vehicle = m.group("vehicle")
         ts = m.group("ts")
+        # Prefer timestamp as anchor (more precise); fall back to embedded date.
         if ts:
             candidates = _candidates_from_ts(bag_name, vehicle, ts)
         else:
