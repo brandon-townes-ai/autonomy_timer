@@ -6,7 +6,7 @@ from typing import Optional
 
 
 _PATH_RE = re.compile(
-    r"(/media/hotswap[12]/(?P<vehicle>[a-z]+-\d+)/\d{4}/\d{1,2}/\d{1,2}/[^\s\n]+)"
+    r"(/media/hotswap[12]/echelon/(?P<vehicle>[a-z]+-\d+)/\d{4}/\d{1,2}/\d{1,2}/[^\s\n]+)"
 )
 
 # Matches bare bag names with an embedded YYYYMMDD date, e.g.:
@@ -52,7 +52,7 @@ def _date_candidates(bag_name: str, vehicle: str, anchor: datetime) -> list[str]
     candidates = []
     for dt in dates:
         for mount in _HOTSWAP_MOUNTS:
-            p = f"/media/{mount}/{vehicle}/{dt.year}/{dt.month}/{dt.day}/{bag_name}"
+            p = f"/media/{mount}/echelon/{vehicle}/{dt.year}/{dt.month}/{dt.day}/{bag_name}"
             if p not in seen:
                 seen.add(p)
                 candidates.append(p)
