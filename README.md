@@ -93,9 +93,5 @@ Jira accumulates the worklog entries, so "Time Spent" reflects the total across 
 ### Bare bag names
 
 If a ticket contains a bare bag name (e.g. `dev_kom-101_rockwell_haul_20260305_...`) without a
-full path, the tool auto-resolves it using the vehicle → hotswap mount mapping:
-
-| Vehicle | Mount |
-|---|---|
-| `kom-101` | `/media/hotswap2` |
-| `rap-107` | `/media/hotswap1` |
+full path, the tool auto-resolves it by trying all known hotswap mounts (`hotswap1`, `hotswap2`)
+across a ±1 day window around the bag's date. Supported vehicles: `kom-101`, `rap-107`, `adt-201`.
