@@ -6,7 +6,7 @@ from typing import Optional
 
 
 _PATH_RE = re.compile(
-    r"(/media/hotswap[12]/echelon/(?P<vehicle>[a-z]+-\d+)/\d{4}/\d{1,2}/\d{1,2}/[^\s\n]+)"
+    r"(/media/hotswap[12]/echelon/(?P<vehicle>[a-z]+-\d+)/(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})/(?P<bag>[^\s\n]+))"
 )
 
 # Matches bare bag names with an embedded YYYYMMDD date, e.g.:
@@ -52,7 +52,7 @@ def _date_candidates(bag_name: str, vehicle: str, anchor: datetime) -> list[str]
     candidates = []
     for dt in dates:
         for mount in _HOTSWAP_MOUNTS:
-            p = f"/media/{mount}/echelon/{vehicle}/{dt.year}/{dt.month}/{dt.day}/{bag_name}"
+            p = f"/media/{mount}/echelon/{vehicle}/{dt.year}/{dt.month:02d}/{dt.day:02d}/{bag_name}"
             if p not in seen:
                 seen.add(p)
                 candidates.append(p)
@@ -92,9 +92,16 @@ def extract_recording_paths(text: str) -> list[RecordingPath]:
             seen.add(path)
             results.append(RecordingPath(path=path, vehicle=vehicle, candidates=candidates))
 
-    # Full /media/hotswap… paths take priority (explicit mount in ticket — no fallback needed).
+    # Full /media/hotswap… paths: normalise date padding and try both mounts.
     for m in _PATH_RE.finditer(text):
-        _add(m.group(1), m.group("vehicle"))
+        vehicle = m.group("vehicle")
+        year, month, day, bag = m.group("year"), m.group("month"), m.group("day"), m.group("bag")
+        candidates = []
+        for mount in _HOTSWAP_MOUNTS:
+            p = f"/media/{mount}/echelon/{vehicle}/{year}/{int(month):02d}/{int(day):02d}/{bag}"
+            if p not in candidates:
+                candidates.append(p)
+        _add(candidates[0], vehicle, candidates)
 
     # Basenames of all full paths already seen, for bare-bag deduplication below.
     seen_basenames = {p.rstrip("/").rsplit("/", 1)[-1] for p in seen}
