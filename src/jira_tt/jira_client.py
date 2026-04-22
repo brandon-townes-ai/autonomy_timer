@@ -1,4 +1,6 @@
 """Jira Cloud REST API client."""
+import time
+
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -31,6 +33,18 @@ class JiraClient:
     def _log(self, msg: str):
         if self._verbose:
             print(f"[jira] {msg}")
+
+    def _post_with_retry(self, url: str, json: dict, max_retries: int = 3) -> requests.Response:
+        """POST with retry on transient connection errors (exponential backoff: 1s, 2s, 4s)."""
+        for attempt in range(max_retries + 1):
+            try:
+                return self._session.post(url, json=json)
+            except requests.exceptions.ConnectionError as exc:
+                if attempt >= max_retries:
+                    raise
+                wait = 2 ** attempt
+                self._log(f"Connection error (attempt {attempt + 1}/{max_retries + 1}), retrying in {wait}s: {exc}")
+                time.sleep(wait)
 
     def fetch_issue_text(self, issue_key: str) -> str:
         """Fetch Jira issue description and comments as plain text."""
@@ -111,7 +125,7 @@ class JiraClient:
         payload = {"timeSpent": duration}
         url = self._url(f"issue/{issue_key}/worklog")
         self._log(f"POST {url} payload={payload}")
-        resp = self._session.post(url, json=payload)
+        resp = self._post_with_retry(url, json=payload)
         self._log(f"HTTP {resp.status_code} — {resp.text[:500]}")
         resp.raise_for_status()
 
@@ -129,7 +143,7 @@ class JiraClient:
                 ],
             }
         }
-        resp = self._session.post(self._url(f"issue/{issue_key}/comment"), json=payload)
+        resp = self._post_with_retry(self._url(f"issue/{issue_key}/comment"), json=payload)
         resp.raise_for_status()
 
     def update_custom_field(self, issue_key: str, field_id: str, value: str) -> None:
